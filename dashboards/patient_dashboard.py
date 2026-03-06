@@ -2,6 +2,7 @@
 import streamlit as st
 from components.sidebar import sidebar
 from components.charts import patient_line_chart, appointment_donut_chart
+from dashboards.d4_module import d4_module_detail
 
 # All categories and their modules
 CATEGORIES = {
@@ -150,13 +151,20 @@ def patient_dashboard():
 
     # Handle sidebar selection
     if selected != "Dashboard" and selected in CATEGORIES:
-        st.session_state.selected_category = selected
-        st.session_state.view = "category"
-        st.session_state.selected_module = None
+        # Only update if the category actually changed
+        if st.session_state.selected_category != selected:
+            st.session_state.selected_category = selected
+            st.session_state.view = "category"
+            st.session_state.selected_module = None
+            st.rerun()
+            
     elif selected == "Dashboard":
-        st.session_state.view = "main"
-        st.session_state.selected_category = None
-        st.session_state.selected_module = None
+        # Only update if we are not already on the main dashboard
+        if st.session_state.view != "main":
+            st.session_state.view = "main"
+            st.session_state.selected_category = None
+            st.session_state.selected_module = None
+            st.rerun()
 
     # ROUTER
     if st.session_state.view == "category":
@@ -360,6 +368,11 @@ def show_category_view():
 def show_module_detail():
     code, name, desc, tables, records = st.session_state.selected_module
     cat_key = st.session_state.selected_category
+    
+    # Special handling for D4 module
+    if code == "D4":
+        d4_module_detail()
+        return
     
     # Breadcrumb
     st.markdown(f"Category {cat_key.split('-')[0].strip()} > {name}")

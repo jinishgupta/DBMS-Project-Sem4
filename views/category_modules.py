@@ -27,9 +27,9 @@ def category_modules():
             if st.button(f"{module[0]} - {module[1]}"):
                 st.session_state.selected_module = module
                 st.session_state.view = "module_detail"
-                st.experimental_rerun()
+                st.rerun()
 
     st.divider()
     if st.button("⬅ Back to Dashboard"):
         st.session_state.view = "dashboard"
-        st.experimental_rerun()
+        st.rerun()
