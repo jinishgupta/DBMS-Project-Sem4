@@ -188,27 +188,34 @@ def compute_polypharmacy_assessment(patient: dict):
 
     # ---- Recommendations text ----
     recs = []
-    if duplicate_therapies:
-        recs.extend(duplicate_therapies)
-    if age_warnings:
-        # One summary line plus detailed bullets already in age_warnings field
-        affected_names = []
+    
+    # Names for clear rendering in the recommendation
+    duplicate_names = []
+    for cls, meds_in_class in class_groups.items():
+        if len(meds_in_class) > 1:
+            meds_sorted = sorted(meds_in_class, key=lambda m: m.get("medication_id") if m.get("medication_id") is not None else 0)
+            remove_names = [m.get("name") or f"ID {m.get('medication_id')}" for m in meds_sorted[1:]]
+            duplicate_names.extend(remove_names)
+            
+    if duplicate_names:
+        recs.append(f"These medicines are duplicates: {', '.join(duplicate_names)} and ")
+
+    age_harmful_names = []
+    if age is not None:
         for med in medicines:
             med_id_str = str(med.get("medication_id")) if med.get("medication_id") is not None else None
             if med_id_str in age_remove_ids:
-                affected_names.append(med.get("name") or f"ID {med.get('medication_id')}")
-        if affected_names:
-            recs.append(
-                f"These medicines ({', '.join(affected_names)}) are outside age-appropriate range "
-                "and should be removed from the regimen."
-            )
-        recs.extend(age_warnings)
+                age_harmful_names.append(med.get("name") or f"ID {med.get('medication_id')}")
+                
+    if age_harmful_names:
+        recs.append(f"these medicines are potentially harmful for the patient's age: {', '.join(age_harmful_names)}. Therefore, remove these from the prescription.")
 
     if len(updated_med_ids) >= 5:
         recs.append(
-            "High pill burden remains even after removing duplicate and high-risk medicines. "
+            "High pill burden (> 5 meds) remains even after proposing removal of duplicates/high-risk medicines. "
             "Consider further deprescribing where clinically appropriate."
         )
+        
     if not recs:
         recs.append("Current regimen appears acceptable. Continue routine monitoring.")
 
@@ -291,9 +298,32 @@ def d4_module_detail():
             
         st.markdown("### 📊 Module Statistics")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Patients", "12,500")
-        c2.metric("Medicines", "8,900")
-        c3.metric("Assessments", "6,400")
+        
+        # Fetch real statistics from Supabase
+        supabase = get_supabase()
+        
+        try:
+            # Note: For large tables in production, count exact query might be slow, but it's fine for small to medium sets
+            patients_resp = supabase.table("Patient").select("patient_id", count="exact").limit(1).execute()
+            patient_count = patients_resp.count if patients_resp.count is not None else 0
+        except Exception:
+            patient_count = "N/A"
+            
+        try:
+            meds_resp = supabase.table("Medicine").select("medication_id", count="exact").limit(1).execute()
+            med_count = meds_resp.count if meds_resp.count is not None else 0
+        except Exception:
+            med_count = "N/A"
+            
+        try:
+            assess_resp = supabase.table("Polypharmacy_Assessment").select("assessment_id", count="exact").limit(1).execute()
+            assessment_count = assess_resp.count if assess_resp.count is not None else 0
+        except Exception:
+            assessment_count = "N/A"
+
+        c1.metric("Patients", str(patient_count))
+        c2.metric("Medicines", str(med_count))
+        c3.metric("Assessments", str(assessment_count))
     
     elif tab == "🔗 ER Diagram":
         st.markdown("### Entity Relationship Diagram")
@@ -311,7 +341,7 @@ def d4_module_detail():
 
         with st.expander("2️⃣ **Medicine** Table"):
             st.table({
-                "Column Name": ["medication_id", "name", "salt", "atc_code", "therapeutic_class", "min_age", "max_age", "age_warning_above/below", "contraindicated_diseases"],
+                "Column Name": ["medication_id", "name", "salt", "atc_code", "therapeutic_class", "min_age", "max_age", "age_warning_above_below", "contraindicated_diseases"],
                 "Data Type": ["INT (PK)", "VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR", "INT", "INT", "BOOLEAN", "TEXT"],
                 "Description": ["Unique ID", "Drug Name", "Chemical Salt", "Anatomical Code", "Class", "Min Age", "Max Age", "Age Warnings", "Disease Constraint"]
             })
@@ -329,42 +359,116 @@ def d4_module_detail():
         st.subheader("1. Identify High-Risk Patients")
         st.code("""
 SELECT p.name, p.age, pa.risk_score, pa.recommendations
-FROM Patient p
-JOIN Polypharmacy_Assessment pa ON p.patient_id = pa.patient_id
-WHERE pa.risk_score > 75
+FROM "Patient" p
+JOIN "Polypharmacy_Assessment" pa ON p.patient_id = pa.patient_id
+WHERE pa.risk_score >= 75
 ORDER BY pa.risk_score DESC;
         """, language="sql")
         
-        st.subheader("2. Find Medicines with Age Warnings")
+        st.subheader("2. Patients with Duplicate Therapies Detected")
         st.code("""
-SELECT m.name, m.min_age, m.max_age, p.name, p.age
-FROM Patient p
-JOIN Medicine m ON FIND_IN_SET(m.medication_id, p.medications)
-WHERE (p.age < m.min_age OR p.age > m.max_age);
+SELECT p.name, pa.risk_score, pa.duplicate_therapies 
+FROM "Patient" p
+JOIN "Polypharmacy_Assessment" pa ON p.patient_id = pa.patient_id
+WHERE pa.duplicate_therapies IS NOT NULL AND pa.duplicate_therapies != '';
         """, language="sql")
         
-        if st.button("▶️ Execute Queries"):
-            st.success("Queries executed successfully! 145 rows returned.")
+        if st.button("▶️ Execute Queries", type="primary"):
+            supabase = get_supabase()
+            
+            st.markdown("#### **Query 1 Results: High-Risk Patients**")
+            try:
+                # Fetch assessments
+                resp1 = supabase.table("Polypharmacy_Assessment").select("patient_id, risk_score, recommendations").gte("risk_score", 75).order("risk_score", desc=True).execute()
+                
+                if resp1.data:
+                    # Fetch linked patients
+                    p_ids = [r["patient_id"] for r in resp1.data]
+                    if p_ids:
+                        patients_resp = supabase.table("Patient").select("patient_id, name, age").in_("patient_id", p_ids).execute()
+                        patient_dict = {p["patient_id"]: p for p in (patients_resp.data or [])}
+                    else:
+                        patient_dict = {}
+                    
+                    formatted_data1 = []
+                    for row in resp1.data:
+                        p_info = patient_dict.get(row["patient_id"], {})
+                        formatted_data1.append({
+                            "Patient Name": p_info.get("name", "Unknown"),
+                            "Age": p_info.get("age", "N/A"),
+                            "Risk Score": row.get("risk_score"),
+                            "Recommendations": row.get("recommendations")
+                        })
+                    st.dataframe(formatted_data1, use_container_width=True)
+                    st.success(f"Query 1 executed successfully! {len(formatted_data1)} rows returned.")
+                else:
+                    st.info("No high-risk patients found.")
+            except Exception as e:
+                st.error(f"Error executing Query 1: {e}")
+
+            st.markdown("#### **Query 2 Results: Patients with Duplicate Therapies**")
+            try:
+                # Fetch assessments
+                resp2 = supabase.table("Polypharmacy_Assessment").select("patient_id, risk_score, duplicate_therapies").neq("duplicate_therapies", "").execute()
+                
+                if resp2.data:
+                    # Filter out null strings or purely whitespace
+                    valid_resp2 = [r for r in resp2.data if r.get("duplicate_therapies") and r.get("duplicate_therapies").strip()]
+                    
+                    if valid_resp2:
+                        p_ids = [r["patient_id"] for r in valid_resp2]
+                        if p_ids:
+                            patients_resp = supabase.table("Patient").select("patient_id, name").in_("patient_id", p_ids).execute()
+                            patient_dict = {p["patient_id"]: p for p in (patients_resp.data or [])}
+                        else:
+                            patient_dict = {}
+                        
+                        formatted_data2 = []
+                        for row in valid_resp2:
+                            p_info = patient_dict.get(row["patient_id"], {})
+                            formatted_data2.append({
+                                "Patient Name": p_info.get("name", "Unknown"),
+                                "Risk Score": row.get("risk_score"),
+                                "Duplicate Therapies": row.get("duplicate_therapies")
+                            })
+                        st.dataframe(formatted_data2, use_container_width=True)
+                        st.success(f"Query 2 executed successfully! {len(formatted_data2)} rows returned.")
+                    else:
+                        st.info("No patients with duplicate therapies found.")
+                else:
+                    st.info("No patients with duplicate therapies found.")
+            except Exception as e:
+                st.error(f"Error executing Query 2: {e}")
 
     elif tab == "⚡ Triggers":
         st.markdown("### Database Triggers")
         
-        st.subheader("Trigger: Auto-Generate Risk Assessment")
+        st.subheader("Trigger: Auto-Reassess Polypharmacy Risk")
         st.code("""
-CREATE TRIGGER after_patient_update
-AFTER UPDATE ON Patient
-FOR EACH ROW
+CREATE OR REPLACE FUNCTION trigger_reassess_polypharmacy()
+RETURNS TRIGGER AS $$
 BEGIN
-    -- Simplified logic: Insert assessment if meds changed
-    IF OLD.medications <> NEW.medications THEN
-        INSERT INTO Polypharmacy_Assessment (patient_id, total_active_meds, risk_score)
-        VALUES (NEW.patient_id, 
-                LENGTH(NEW.medications) - LENGTH(REPLACE(NEW.medications, ',', '')) + 1,
-                (LENGTH(NEW.medications) - LENGTH(REPLACE(NEW.medications, ',', '')) + 1) * 5
-        );
+    -- If the patient's medication list changes, we invalidate the current assessment
+    IF OLD.medications IS DISTINCT FROM NEW.medications THEN
+        -- Delete the outdated assessment to force a re-evaluation on the application side.
+        -- When the dashboard is opened, get_or_create_assessment() will run dynamically.
+        DELETE FROM "Polypharmacy_Assessment" WHERE patient_id = NEW.patient_id;
     END IF;
+    RETURN NEW;
 END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER after_patient_meds_update
+AFTER UPDATE ON "Patient"
+FOR EACH ROW
+EXECUTE FUNCTION trigger_reassess_polypharmacy();
         """, language="sql")
+        
+        st.info(
+            "**How it works:** This PostgreSQL trigger ensures that whenever a doctor updates a patient's medications in the `Patient` table, "
+            "the existing `Polypharmacy_Assessment` record is deleted. The next time the dashboard is loaded for that patient, a fresh risk assessment "
+            "will be dynamically computed and inserted into the database. This guarantees the risk score is always perfectly synced with the patient's current regimen."
+        )
 
     elif tab == "📊 Output":
         st.markdown("### Module Output")
@@ -445,21 +549,37 @@ END;
         st.markdown("#### 🧭 Recommendations")
         st.info(assessment.get("recommendations") or "No specific recommendations generated.")
 
-        # Current regimen table
+        # Updated regimen table
         if medicines:
-            st.markdown("#### 💊 Current Medication Regimen")
-            st.table(
-                [
-                    {
-                        "Medication": med.get("name"),
-                        "Salt": med.get("salt"),
-                        "ATC Code": med.get("atc_code"),
-                        "Therapeutic Class": med.get("therapeutic_class"),
-                        "Min Age": med.get("min_age"),
-                        "Max Age": med.get("max_age"),
-                    }
-                    for med in medicines
-                ]
-            )
+            st.markdown("#### 💊 Updated Medication Regimen")
+            
+            # Filter medicines based on the updated_meds list in the assessment
+            updated_meds_str = assessment.get("updated_meds", "")
+            # Handle potential None or empty values gracefully
+            updated_med_ids_str_list = [mid.strip() for mid in (updated_meds_str or "").split(",") if mid.strip()]
+            
+            updated_medicines = []
+            for med in medicines:
+                med_id_str = str(med.get("medication_id")) if med.get("medication_id") is not None else None
+                # If med_id is in the updated list, OR if updated list is empty (which might mean either no meds or all meds removed, but typically if it's empty we show nothing, but we'll fall back to showing it if we can't parse it well. Let's just strictly check)
+                if med_id_str in updated_med_ids_str_list:
+                    updated_medicines.append(med)
+            
+            if updated_medicines:
+                st.table(
+                    [
+                        {
+                            "Medication": med.get("name"),
+                            "Salt": med.get("salt"),
+                            "ATC Code": med.get("atc_code"),
+                            "Therapeutic Class": med.get("therapeutic_class"),
+                            "Min Age": med.get("min_age") if med.get("min_age") is not None else "NULL",
+                            "Max Age": med.get("max_age") if med.get("max_age") is not None else "NULL",
+                        }
+                        for med in updated_medicines
+                    ]
+                )
+            else:
+                st.info("No medications remain in the updated regimen.")
 
         st.divider()
