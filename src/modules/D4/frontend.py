@@ -72,17 +72,16 @@ def render_assessment_card(assessment: dict, patient_name: str, patient_age: int
             st.caption(f"Assessment ID: {assessment.get('assessment_id', 'N/A')}")
         
         if st.button(f"View Details →", key=f"view_{assessment.get('assessment_id', assessment.get('patient_id'))}", use_container_width=True):
-            st.session_state.selected_assessment_id = assessment.get('patient_id')
-            st.session_state.selected_assessment_detail = assessment.get('assessment_id')
+            st.session_state.selected_assessment_id = assessment.get('assessment_id')
             st.rerun()
         
         st.markdown("</div>", unsafe_allow_html=True)
         st.divider()
 
 
-def render_assessment_detail(patient_id: int):
-    with st.spinner(f"Loading assessment for patient {patient_id}..."):
-        data = call_api(f"/assessment/{patient_id}", timeout=60)
+def render_assessment_detail(assessment_id: int):
+    with st.spinner(f"Loading assessment {assessment_id}..."):
+        data = call_api(f"/assessment/id/{assessment_id}", timeout=60)
     
     if not data:
         st.error("Unable to load assessment data.")

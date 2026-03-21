@@ -71,6 +71,38 @@ def list_assessments():
         raise HTTPException(status_code=500, detail=f"Error fetching assessments: {str(e)}")
 
 
+@app.get("/assessment/id/{assessment_id}")
+def get_assessment_by_id_endpoint(assessment_id: int):
+    try:
+        from app.services.assessment import get_assessment_by_id
+        from app.services.medicine import fetch_medicines_for_patient
+        
+        print(f"[API] Fetching assessment {assessment_id}...")
+        assessment = get_assessment_by_id(assessment_id)
+        if not assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+        
+        patient_id = assessment.get("patient_id")
+        patient = fetch_patient(patient_id)
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        
+        _, medicines = fetch_medicines_for_patient(patient)
+        
+        return {
+            "patient": patient,
+            "assessment": assessment,
+            "medicines": medicines
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"[API ERROR] {error_trace}")
+        raise HTTPException(status_code=500, detail=f"Error fetching assessment: {str(e)}")
+
+
 @app.get("/assessment/{patient_id}")
 def get_assessment(patient_id: int):
     start_time = time.time()

@@ -215,6 +215,17 @@ def get_all_assessments_for_patient(patient_id: int):
     return resp.data or []
 
 
+def get_assessment_by_id(assessment_id: int):
+    supabase = get_supabase()
+    try:
+        resp = supabase.table("Polypharmacy_Assessment").select("*").eq("assessment_id", assessment_id).limit(1).execute()
+        if resp.data:
+            return resp.data[0]
+    except Exception as e:
+        print(f"Error fetching assessment by ID: {e}")
+    return None
+
+
 def fetch_all_assessments():
     supabase = get_supabase()
     resp = supabase.table("Polypharmacy_Assessment").select("*").execute()

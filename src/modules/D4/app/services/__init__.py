@@ -5,6 +5,7 @@ from .assessment import (
     get_or_create_assessment,
     create_new_assessment,
     get_all_assessments_for_patient,
+    get_assessment_by_id,
     fetch_all_assessments
 )
 
@@ -16,5 +17,6 @@ __all__ = [
     "get_or_create_assessment",
     "create_new_assessment",
     "get_all_assessments_for_patient",
+    "get_assessment_by_id",
     "fetch_all_assessments",
 ]
