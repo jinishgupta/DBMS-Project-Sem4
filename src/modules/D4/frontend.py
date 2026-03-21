@@ -249,9 +249,9 @@ def d4_module_detail():
         
         with st.expander("3️⃣ **Polypharmacy_Assessment** Table"):
             st.table({
-                "Column Name": ["assessment_id", "patient_id", "total_active_meds", "risk_score", "updated_meds", "duplicate_therapies", "age_warnings", "recommendations"],
-                "Data Type": ["INT (PK)", "INT (FK)", "INT", "DECIMAL", "TEXT", "TEXT", "TEXT", "TEXT"],
-                "Description": ["Unique ID", "Links to Patient", "Count of active meds", "0-100 Score", "Review status", "Duplicate alerts", "Age-based alerts", "Doctor action items"]
+                "Column Name": ["assessment_id", "patient_id", "total_active_meds", "risk_score", "updated_meds", "duplicate_therapies", "age_warnings", "recommendations","contraindiction_warnings","created_at"],
+                "Data Type": ["INT (PK)", "INT (FK)", "INT", "DECIMAL", "TEXT", "TEXT", "TEXT", "TEXT","TEXT","TIMESTAMP"],
+                "Description": ["Unique ID", "Links to Patient", "Count of active meds", "0-100 Score", "Review status", "Duplicate alerts", "Age-based alerts", "Doctor action items","Contraindiction alerts","Time of assessment"]
             })
     
     elif tab == "🔍 SQL Query":
