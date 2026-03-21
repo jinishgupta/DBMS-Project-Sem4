@@ -2,7 +2,7 @@
 import streamlit as st
 from components.sidebar import sidebar
 from components.charts import patient_line_chart, appointment_donut_chart
-from src.modules.D4.d4_module import d4_module_detail
+from src.modules.D4.frontend import d4_module_detail
 
 # All categories and their modules
 CATEGORIES = {
