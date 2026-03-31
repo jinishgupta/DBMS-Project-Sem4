@@ -583,3 +583,4 @@ EXECUTE FUNCTION trigger_reassess_polypharmacy();
                 st.info("No medications remain in the updated regimen.")
 
         st.divider()
+
