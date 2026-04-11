@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.patient import fetch_patient, fetch_all_patients
-from app.services.assessment import get_or_create_assessment, fetch_all_assessments
+from app.services.assessment import get_or_create_assessment, fetch_all_assessments, fetch_assessment_by_id
 from app.db.supabase_client import get_supabase
+from app.services.medicine import fetch_medicines_for_patient
 import time
 
 app = FastAPI(
@@ -76,16 +77,13 @@ def get_assessment(patient_id: int):
     start_time = time.time()
     
     try:
-        print(f"[API] Fetching patient {patient_id}...")
         patient = fetch_patient(patient_id)
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         
-        print(f"[API] Patient found. Computing assessment...")
         assessment, medicines = get_or_create_assessment(patient)
         
         elapsed = time.time() - start_time
-        print(f"[API] Assessment completed in {elapsed:.2f}s")
         
         return {
             "patient": patient,
@@ -97,8 +95,28 @@ def get_assessment(patient_id: int):
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"[API ERROR] {error_trace}")
         raise HTTPException(status_code=500, detail=f"Error processing assessment: {str(e)}")
+
+
+@app.get("/assessment/detail/{assessment_id}")
+def get_assessment_by_id(assessment_id: int):
+    try:
+        assessment = fetch_assessment_by_id(assessment_id)
+        if not assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+            
+        patient = fetch_patient(assessment["patient_id"])
+        _, medicines = fetch_medicines_for_patient(patient)
+        
+        return {
+            "patient": patient,
+            "assessment": assessment,
+            "medicines": medicines
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching exact assessment: {str(e)}")
 
 
 @app.get("/assessments/patient/{patient_id}")

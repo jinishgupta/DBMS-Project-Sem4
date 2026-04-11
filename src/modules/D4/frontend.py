@@ -80,9 +80,12 @@ def render_assessment_card(assessment: dict, patient_name: str, patient_age: int
         st.divider()
 
 
-def render_assessment_detail(patient_id: int):
+def render_assessment_detail(patient_id: int, assessment_id: int = None):
     with st.spinner(f"Loading assessment for patient {patient_id}..."):
-        data = call_api(f"/assessment/{patient_id}", timeout=60)
+        if assessment_id:
+            data = call_api(f"/assessment/detail/{assessment_id}", timeout=60)
+        else:
+            data = call_api(f"/assessment/{patient_id}", timeout=60)
     
     if not data:
         st.error("Unable to load assessment data.")
@@ -90,6 +93,7 @@ def render_assessment_detail(patient_id: int):
         with col1:
             if st.button("← Back", use_container_width=True):
                 st.session_state.selected_assessment_id = None
+                st.session_state.selected_assessment_detail = None
                 st.rerun()
         with col2:
             st.info("💡 Check that the API server is running and the database is accessible.")
@@ -103,6 +107,7 @@ def render_assessment_detail(patient_id: int):
     with col1:
         if st.button("← Back", use_container_width=True):
             st.session_state.selected_assessment_id = None
+            st.session_state.selected_assessment_detail = None
             st.rerun()
     with col2:
         st.markdown("### Assessment Details")
@@ -295,7 +300,10 @@ EXECUTE FUNCTION trigger_reassess_polypharmacy();""", language="sql")
         st.markdown("### Module Output")
         
         if "selected_assessment_id" in st.session_state and st.session_state.selected_assessment_id:
-            render_assessment_detail(st.session_state.selected_assessment_id)
+            render_assessment_detail(
+                st.session_state.selected_assessment_id,
+                st.session_state.get("selected_assessment_detail")
+            )
         else:
             assessments_data = call_api("/assessments")
             patients_data = call_api("/patients")
@@ -355,6 +363,7 @@ EXECUTE FUNCTION trigger_reassess_polypharmacy();""", language="sql")
                         with col3:
                             if st.button("Create Assessment", key=f"create_{patient_id}"):
                                 st.session_state.selected_assessment_id = patient_id
+                                st.session_state.selected_assessment_detail = None
                                 st.rerun()
                 return
             

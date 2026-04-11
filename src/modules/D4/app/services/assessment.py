@@ -200,6 +200,7 @@ def get_or_create_assessment(patient: dict):
         if existing.data:
             _, meds = fetch_medicines_for_patient(patient)
             return existing.data[0], meds
+            
     except Exception as e:
         print(f"Error fetching existing assessment: {e}")
     
@@ -213,6 +214,13 @@ def get_all_assessments_for_patient(patient_id: int):
     except Exception:
         resp = supabase.table("Polypharmacy_Assessment").select("*").eq("patient_id", patient_id).execute()
     return resp.data or []
+
+
+def fetch_assessment_by_id(assessment_id: int):
+    supabase = get_supabase()
+    resp = supabase.table("Polypharmacy_Assessment").select("*").eq("assessment_id", assessment_id).limit(1).execute()
+    data = resp.data or []
+    return data[0] if data else None
 
 
 def fetch_all_assessments():
