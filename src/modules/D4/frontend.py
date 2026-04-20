@@ -4,7 +4,7 @@ from typing import Optional
 from collections import defaultdict
 from datetime import datetime
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "https://dbms-project-sem4.onrender.com"
 
 
 def call_api(endpoint: str, method: str = "GET", timeout: int = 30) -> Optional[dict]:
